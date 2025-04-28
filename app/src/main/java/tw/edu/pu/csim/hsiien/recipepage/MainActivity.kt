@@ -1,16 +1,20 @@
 package tw.edu.pu.csim.hsiien.recipepage
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,14 +22,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.google.gson.Gson
 import tw.edu.pu.csim.hsiien.recipepage.ui.theme.RecipepageTheme
+import java.io.InputStreamReader
 
-
+data class RecipeItem(
+    val title: String,
+    val link: String,
+    val image: String
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,32 +45,25 @@ class MainActivity : ComponentActivity() {
         setContent {
             RecipepageTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    RecipePage()
+                    RecipePageWithData()
                 }
             }
         }
     }
 }
 
-@Composable
 @OptIn(ExperimentalMaterial3Api::class)
-fun RecipePage() {
-    val textFieldValue = remember { mutableStateOf("") }
+@Composable
+fun RecipePageWithData() {
+    val context = LocalContext.current
+    val allRecipes = remember { loadRecipesFromAssets(context) }
+    var searchText by remember { mutableStateOf("") }
 
-    // ➕ 新增更多食譜項目讓畫面可滑動
-    val recipes = listOf(
-        "番茄炒蛋" to "https://i.imgur.com/zMZxU8v.jpg",
-        "義大利麵" to "https://i.imgur.com/8QO4YDa.jpg",
-        "燉牛肉" to "https://i.imgur.com/UqEBkIh.jpg",
-        "炒青菜" to "https://i.imgur.com/FJ3Y7GL.jpg",
-        "三杯雞" to "https://i.imgur.com/sXTCvVu.jpg",
-        "滷肉飯" to "https://i.imgur.com/ONb5XpC.jpg",
-        "控肉" to "https://i.imgur.com/VYOd1Ei.jpg",
-        "炒蛋" to "https://i.imgur.com/8QO4YDa.jpg"
-    )
+    val filteredRecipes = allRecipes.filter {
+        it.title.contains(searchText, ignoreCase = true)
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // 頂部欄
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -66,12 +71,7 @@ fun RecipePage() {
                 .background(Color(0xFFD7E0E5))
                 .padding(vertical = 6.dp, horizontal = 24.dp)
         ) {
-            Text(
-                "Refrigerator",
-                color = Color.Black,
-                fontSize = 24.sp,
-                modifier = Modifier.weight(1f)
-            )
+            Text("Refrigerator", color = Color.Black, fontSize = 24.sp, modifier = Modifier.weight(1f))
             AsyncImage(
                 model = "https://img.icons8.com/ios-filled/50/shopping-cart.png",
                 contentDescription = "Cart Icon",
@@ -79,32 +79,30 @@ fun RecipePage() {
             )
         }
 
-        // 搜尋欄（調整高度、icon ）
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .padding(16.dp)
                 .clip(RoundedCornerShape(50))
                 .background(Color(0xFFD9D9D9))
                 .height(42.dp)
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
         ) {
-            AsyncImage(
-                model = "https://figma-alpha-api.s3.us-west-2.amazonaws.com/images/e346ee13-bedc-4716-997c-3021b1c60805",
-                contentDescription = "Search Icon",
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
                 modifier = Modifier
-                    .size(24.dp) // ✅ icon 放大
-                    .padding(end = 8.dp)
+                    .size(20.dp)
+                    .padding(end = 8.dp),
+                tint = Color.Gray
             )
 
             TextField(
-                value = textFieldValue.value,
-                onValueChange = { textFieldValue.value = it },
-                placeholder = { Text("搜尋食譜", color = Color.Gray, fontSize = 14.sp) }, // ✅ 確保文字顯示
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(42.dp),
+                value = searchText,
+                onValueChange = { searchText = it },
+                placeholder = { Text("搜尋食譜", color = Color.Gray, fontSize = 14.sp) },
+                modifier = Modifier.fillMaxWidth(),
                 textStyle = TextStyle(fontSize = 14.sp),
                 colors = TextFieldDefaults.textFieldColors(
                     containerColor = Color.Transparent,
@@ -116,61 +114,56 @@ fun RecipePage() {
             )
         }
 
-
-
-
-        // 食譜列表
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.weight(1f)
         ) {
-            items(recipes) { recipe ->
-                Column(
+            items(filteredRecipes) { recipe ->
+                Card(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFEAEAEA))
+                        .fillMaxWidth()
+                        .clickable {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://icook.tw${recipe.link}"))
+                            context.startActivity(intent)
+                        },
+                    elevation = CardDefaults.cardElevation(4.dp),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    AsyncImage(
-                        model = recipe.second,
-                        contentDescription = recipe.first,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp) // ⬅️ 稍微縮短圖片
-                            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(recipe.first, fontSize = 14.sp)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(" 503", fontSize = 12.sp)
-                        }
+                    Column {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(recipe.image)
+                                .crossfade(true)
+                                .error(R.drawable.ic_launcher_background)
+                                .placeholder(R.drawable.ic_launcher_foreground)
+                                .build(),
+                            contentDescription = recipe.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                                .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                        )
+                        Text(
+                            text = recipe.title,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(8.dp),
+                            maxLines = 1
+                        )
                     }
                 }
             }
         }
 
-
-        // 底部導航（補回來）
         Row(
             horizontalArrangement = Arrangement.SpaceEvenly,
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFFF5F0F5))
-                .padding(vertical = 10.dp) // ⬅️ 增加 padding，空間感更舒適
+                .padding(vertical = 10.dp)
         ) {
             val icons = listOf(
                 "https://figma-alpha-api.s3.us-west-2.amazonaws.com/images/05ddb832-37fe-47c3-8220-028ff10b3a3b",
@@ -182,11 +175,20 @@ fun RecipePage() {
                 AsyncImage(
                     model = iconUrl,
                     contentDescription = null,
-                    modifier = Modifier.size(32.dp) // ⬅️ 微調大小更剛好
+                    modifier = Modifier.size(32.dp)
                 )
             }
         }
     }
 }
 
-//目前可以跑 但畫面不夠協調
+fun loadRecipesFromAssets(context: Context): List<RecipeItem> {
+    return try {
+        val inputStream = context.assets.open("recipes_all.json")
+        val json = InputStreamReader(inputStream).readText()
+        Gson().fromJson(json, Array<RecipeItem>::class.java).toList()
+    } catch (e: Exception) {
+        e.printStackTrace()
+        emptyList()
+    }
+}

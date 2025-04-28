@@ -68,6 +68,7 @@ dependencies {
 
     // ✅ Coil for Jetpack Compose (使用 AsyncImage)
     implementation("io.coil-kt:coil-compose:2.4.0")
+    implementation("com.google.code.gson:gson:2.10.1")
 
     // （如果你還有用 landscapist 套件，也保留）
     implementation("com.github.skydoves:landscapist-coil:2.2.0")
